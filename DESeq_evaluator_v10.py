@@ -168,7 +168,7 @@ for element in infile_list:
         except:
             express = 0
 
-        if individual_gene.basemean[0] > args.basemean and individual_gene.logfold[0] > args.log2fold:
+        if individual_gene.basemean[0] > args.basemean and express > args.log2fold:
             # add empty genes to the output gene list, populate values later
             if not contains( output.genelist, lambda gene: gene.name == individual_gene.name):
                 output.genelist.append(gene(individual_gene.name))
