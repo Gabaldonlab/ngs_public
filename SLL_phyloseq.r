@@ -16,10 +16,27 @@ library(gtools)
 #load microbiome data ####
 # ******************************************************* #
 
-if (dir.exists("/users/tg/jwillis/SLL")) { home_dir <- "/users/tg/jwillis/SLL"
-} else if (dir.exists(sprintf("%s/SLL", getwd()))) { home_dir <- sprintf("%s/SLL", getwd())
-} else if (dir.exists("~/Downloads/SLL")) { home_dir <- "~/Downloads/SLL"
+# depending on where the script is located...
+if (dir.exists("/users/tg/jwillis/SLL")) {
+  home_dir <- "/users/tg/jwillis/SLL"
+} else if (dir.exists(sprintf("%s/SLL", getwd()))) {
+  home_dir <- sprintf("%s/SLL", getwd())
+} else if (dir.exists("~/Downloads/SLL")) {
+  home_dir <- "~/Downloads/SLL"
+} else {
+  home_dir <- getwd()
 }
+
+if (dir.exists("/users/tg/jwillis/SLL") || dir.exists(sprintf("%s/SLL", getwd())) || dir.exists("~/Downloads/SLL")) {
+  p1_dir    <- sprintf("%s/Part_1", home_dir)
+  moth_dir  <- sprintf("%s/Part_1/mothur", home_dir)
+  surv_dir  <- sprintf("%s/Part_1/Surveys", home_dir)
+  water_dir <- sprintf("%s/Water_quality_data", home_dir)
+  esp_dir   <- sprintf("%s/ESP_adm_shp", home_dir)
+} else {
+  p1_dir <- moth_dir <- surv_dir <- water_dir <- esp_dir <- home_dir
+}
+
 
 # level <- 3
 level <- 6
@@ -28,7 +45,7 @@ taxlevel <- sprintf('tax%s',level)
 
 if (level==3) {
   
-  taxfile <- sprintf("%s/Part_1/mothur/all_tax%d.csv", home_dir, level)
+  taxfile <- sprintf("%s/all_tax%d.csv", moth_dir, level)
   data.tax <- read.delim(taxfile, row.names = 1, header=T)
   tax.table <- tax_table(do.call(rbind, lapply( rownames(data.tax), function(x) strsplit(as.character(x), ";")[[1]] )))
   phyla   <- as.character(tax.table[,'ta2'])
@@ -45,7 +62,7 @@ if (level==3) {
 } else if (level==6) {
   
   # taxfile <- sprintf("/Users/owner1/SLL/all_taxids%d.csv", level)
-  taxfile <- sprintf("%s/Part_1/mothur/all_taxids%d.csv", home_dir, level)
+  taxfile <- sprintf("%s/all_taxids%d.csv", moth_dir, level)
   data.tax <- read.delim(taxfile, row.names = 1, header=T)
   tax.table <- tax_table(do.call(rbind, lapply( data.tax[,1], function(x) strsplit(as.character(x), ";")[[1]] )))
   data.tax <- data.tax[,2:length(data.tax)]
@@ -76,7 +93,8 @@ colnames(data.tax) <- gsub("Sdata\\d.*_","",colnames(data.tax))
 # Questionaire ####
 # ******************************************************* #
 # data.que <- read.delim("/Users/owner1/SLL/SLL_survey_data_repaired.csv", header=T)
-data.que <- read.delim(sprintf("%s/Part_1/Surveys/SLL_survey_data_repaired.csv", home_dir), header=T)
+# data.que <- read.delim(sprintf("%s/SLL_survey_data_repaired.csv", surv_dir), header=T)
+data.que <- read.delim(sprintf("%s/SLL_survey_data_anon.csv", surv_dir), header=T)
 
 # ignore samples of duplicated identifiers bc cannot determine which is correct or what the other should be changed to
 dubs <- as.character(data.que[duplicated(data.que[,"Qsamples"]),"Qsamples"])
@@ -124,7 +142,7 @@ colnames(data.que)[102] <- "Socioeconomic" #shortening super long question name
 otu.table <- otu_table(data.tax, taxa_are_rows=T)
 sample.data <- sample_data(data.que)
 
-sll_tree <- read.tree(file = "/users/tg/jwillis/SLL/Part_1/SLL1.tree")
+sll_tree <- read.tree(file = sprintf("%s/SLL1.tree", p1_dir))
 # st <- taxa_names(SLL)[ ! startsWith(taxa_names(SLL), "unclassified")]
 # st[ ! st %in% sll_tree$tip.label]
 sll_tree$tip.label[sll_tree$tip.label=="Rhodoferax"] <- "Albidiferax" # NCBI automatically changed this one
@@ -208,35 +226,52 @@ sample_data(SLL)[,'Species_Richness'] <- faith$SR
 
 
 
+# # ******************************************************************** #
+# ## Calculate Unifrac distances ####
+# 
+# # if necessary to calculate these values again, simply uncomment this section. 
+# # But takes a long time to calculate, better to read from files that were written from original calculation
+# # library(foreach)
+# # library(doParallel)
+# # 
+# # # This is required in order to register a parallel "backend" so the calculation can be run in parallel
+# # registerDoParallel(cores = 10)
+# # 
+# # weighted_Unifrac <- UniFrac(SLL_with_tree, weighted = T, parallel = T)
+# # unweighted_Unifrac <- UniFrac(SLL_with_tree, weighted = F, parallel = T)
+# # 
+# # write.csv(as.matrix(weighted_Unifrac), file = sprintf("%s/SLL1_w_unifrac.csv", p1_dir))
+# # write.csv(as.matrix(unweighted_Unifrac), file = sprintf("%s/SLL1_uw_unifrac.csv", p1_dir))
+# 
+# weighted_Unifrac <- read.csv(sprintf("%s/SLL1_w_unifrac.csv", p1_dir), row.names = 1)
+# rownames(weighted_Unifrac) <- colnames(weighted_Unifrac) <- gsub('\\.','',rownames(weighted_Unifrac))
+# diag(weighted_Unifrac) <- NA # change diagonal to NA because the values are already 0s since its each sample against itself, can be ignored
+# # weighted_Unifrac <- as.dist(weighted_Unifrac)
+# unweighted_Unifrac <- read.csv(sprintf("%s/SLL1_uw_unifrac.csv", p1_dir), row.names = 1)
+# rownames(unweighted_Unifrac) <- colnames(unweighted_Unifrac) <- gsub('\\.','',rownames(unweighted_Unifrac))
+# diag(unweighted_Unifrac) <- NA # change diagonal to NA because the values are already 0s since its each sample against itself, can be ignored
+# # unweighted_Unifrac <- as.dist(unweighted_Unifrac)
+# 
+# sample_data(SLL)[ rownames(weighted_Unifrac), "Weighted_Unifrac"] <- rowMeans(weighted_Unifrac, na.rm = T)
+# sample_data(SLL)[ rownames(unweighted_Unifrac), "Unweighted_Unifrac"] <- rowMeans(unweighted_Unifrac, na.rm = T)
+# # ******************************************************************** #
+
 # ******************************************************************** #
 ## Calculate Unifrac distances ####
-
-# if necessary to calculate these values again, simply uncomment this section. 
-# But takes a long time to calculate, better to read from files that were written from original calculation
-# library(foreach)
-# library(doParallel)
-# 
-# # This is required in order to register a parallel "backend" so the calculation can be run in parallel
-# registerDoParallel(cores = 10)
-# 
-# weighted_Unifrac <- UniFrac(SLL_with_tree, weighted = T, parallel = T)
-# unweighted_Unifrac <- UniFrac(SLL_with_tree, weighted = F, parallel = T)
-# 
-# write.csv(as.matrix(weighted_Unifrac), file = sprintf("%s/Part_1/SLL1_w_unifrac.csv", home_dir))
-# write.csv(as.matrix(unweighted_Unifrac), file = sprintf("%s/Part_1/SLL1_uw_unifrac.csv", home_dir))
-
-weighted_Unifrac <- read.csv(sprintf("%s/Part_1/SLL1_w_unifrac.csv", home_dir), row.names = 1)
+# *********************** #
+# ****** These use the correct tree to calculate the values
+weighted_Unifrac <- read.csv(sprintf("%s/beta_diversities/SLL1_w_unifrac.csv", p1_dir), row.names = 1)
 diag(weighted_Unifrac) <- NA # change diagonal to NA because the values are already 0s since its each sample against itself, can be ignored
 # weighted_Unifrac <- as.dist(weighted_Unifrac)
-unweighted_Unifrac <- read.csv(sprintf("%s/Part_1/SLL1_uw_unifrac.csv", home_dir), row.names = 1)
+unweighted_Unifrac <- read.csv(sprintf("%s/beta_diversities/SLL1_uw_unifrac.csv", p1_dir), row.names = 1)
 diag(unweighted_Unifrac) <- NA # change diagonal to NA because the values are already 0s since its each sample against itself, can be ignored
 # unweighted_Unifrac <- as.dist(unweighted_Unifrac)
 
-sample_data(SLL)[ rownames(weighted_Unifrac), "Weighted_Unifrac"] <- rowMeans(weighted_Unifrac, na.rm = T)
-sample_data(SLL)[ rownames(unweighted_Unifrac), "Unweighted_Unifrac"] <- rowMeans(unweighted_Unifrac, na.rm = T)
-# ******************************************************************** #
-
-
+SLL@sam_data[ gsub('\\.','',rownames(weighted_Unifrac)), "Weighted_Unifrac"] <- rowMeans(weighted_Unifrac, na.rm = T)
+SLL1@sam_data[ gsub('\\.','',rownames(weighted_Unifrac)), "Weighted_Unifrac"] <- rowMeans(weighted_Unifrac, na.rm = T)
+SLL@sam_data[ gsub('\\.','',rownames(unweighted_Unifrac)), "Unweighted_Unifrac"] <- rowMeans(unweighted_Unifrac, na.rm = T)
+SLL1@sam_data[ gsub('\\.','',rownames(unweighted_Unifrac)), "Unweighted_Unifrac"] <- rowMeans(unweighted_Unifrac, na.rm = T)
+# *********************** #
 
 
 
@@ -261,90 +296,92 @@ sample_data(SLL)[ , "Age"] <- ages
 # ********************************************************************************************************* #
 ###### Add information about fungus in those samples for which we have data ######
 # ********************************************************************************************************* #
-
-fungus.data <- read.delim(sprintf("%s/Part_1/Fungus_data/MALDI-results_modified.csv", home_dir), header=T)
-colnames(fungus.data)[2] <- "Plate.well"
-colnames(fungus.data)[3] <- "Fungus"
-fungus.data <- fungus.data[,2:ncol(fungus.data)]
-
-well_IDs <- read.delim(sprintf("%s/all_sample_96well_locations.csv", home_dir), header=T)
-well_IDs$Sample_ID <- gsub("-", "", well_IDs$Sample_ID)
-#must flip well name to match fungus.data
-well_IDs$Well <- paste0( substring(well_IDs$Well,nchar(as.character(well_IDs$Well))), substring(well_IDs$Well, 1, nchar(as.character(well_IDs$Well))-1) )
-rownames(well_IDs) <- paste(well_IDs$Plate, well_IDs$Well, sep="/")
-
-well_IDs[,"Fungi"] <- vector("numeric", nrow(well_IDs))
-
-for (i in 1:nrow(fungus.data)){
-  x <- as.character(fungus.data[i, "Plate.well"])
-  if (grepl("[.]", x)) {
-    # those samples that had colonies of multiple (potentially) of different fungal species
-    if (well_IDs[ strsplit(x, "[.]")[[1]][1], "Fungi" ] == 0) {
-      well_IDs[ strsplit(x, "[.]")[[1]][1], "Fungi" ] <- as.character(fungus.data[fungus.data[,1]==x, "Fungus"])
+if (dir.exists("/users/tg/jwillis/SLL")) {
+  fungus.data <- read.delim(sprintf("%s/Part_1/Fungus_data/MALDI-results_modified.csv", home_dir), header=T)
+  colnames(fungus.data)[2] <- "Plate.well"
+  colnames(fungus.data)[3] <- "Fungus"
+  fungus.data <- fungus.data[,2:ncol(fungus.data)]
+  
+  well_IDs <- read.delim(sprintf("%s/all_sample_96well_locations.csv", home_dir), header=T)
+  well_IDs$Sample_ID <- gsub("-", "", well_IDs$Sample_ID)
+  #must flip well name to match fungus.data
+  well_IDs$Well <- paste0( substring(well_IDs$Well,nchar(as.character(well_IDs$Well))), substring(well_IDs$Well, 1, nchar(as.character(well_IDs$Well))-1) )
+  rownames(well_IDs) <- paste(well_IDs$Plate, well_IDs$Well, sep="/")
+  
+  well_IDs[,"Fungi"] <- vector("numeric", nrow(well_IDs))
+  
+  for (i in 1:nrow(fungus.data)){
+    x <- as.character(fungus.data[i, "Plate.well"])
+    if (grepl("[.]", x)) {
+      # those samples that had colonies of multiple (potentially) of different fungal species
+      if (well_IDs[ strsplit(x, "[.]")[[1]][1], "Fungi" ] == 0) {
+        well_IDs[ strsplit(x, "[.]")[[1]][1], "Fungi" ] <- as.character(fungus.data[fungus.data[,1]==x, "Fungus"])
+      } else {
+        well_IDs[ strsplit(x, "[.]")[[1]][1], "Fungi" ] <- paste(well_IDs[ strsplit(x, "[.]")[[1]][1], "Fungi" ], as.character(fungus.data[fungus.data[,1]==x, "Fungus"]), sep=",")
+      }
+      
     } else {
-      well_IDs[ strsplit(x, "[.]")[[1]][1], "Fungi" ] <- paste(well_IDs[ strsplit(x, "[.]")[[1]][1], "Fungi" ], as.character(fungus.data[fungus.data[,1]==x, "Fungus"]), sep=",")
-    }
-
-  } else {
-    # those samples with colonies of only one supposed fungal species
-    well_IDs[ strsplit(x, "[.]")[[1]][1], "Fungi" ] <- as.character(fungus.data[fungus.data[,1]==x, "Fungus"])
-  }
-}
-
-# To exclude those 'test' wells that are all labeled "C+", and get just those that are kept in sample_data(SLL)
-proper_well_IDs <- well_IDs[substr(well_IDs[,"Sample_ID"], 1,3)=="SLL","Sample_ID"]
-proper_well_IDs <- proper_well_IDs[proper_well_IDs %in% rownames(sample_data(SLL))]
-
-# Add column to sample_data of fungal species present in samples with data available
-# ***Some have more than 1 species, separated by ","
-#    If no data available for a sample, value is "0"
-sample_data(SLL)[ proper_well_IDs, "Fungi" ] <- well_IDs[ well_IDs[,"Sample_ID"] %in% proper_well_IDs, "Fungi" ]
-
-# ************* #
-# Determine which samples have which fungi present
-fungi.samples <- rownames(sample_data(SLL)[ sample_data(SLL)[, "Fungi"] != 0])
-
-fungi_entries <- as.matrix(unique(sample_data(SLL)[fungi.samples, "Fungi"]))
-diff_fungi <- vector()#mode = "character")
-
-# make a vector of all the different fungi that appear in the sample_data
-i = 1
-for (f in fungi_entries) {
-  if (grepl(',', f)) {
-    f1 <- strsplit(f, ',')[[1]][1]
-    f2 <- strsplit(f, ',')[[1]][2]
-    if (! f1 %in% diff_fungi) {
-      diff_fungi[i] <- f1
-      i <- i + 1
-    }
-    if (! f2 %in% diff_fungi) {
-      diff_fungi[i] <- f2
-      i <- i + 1
-    }
-  } else {
-    if (! f %in% diff_fungi) {
-      diff_fungi[i] <- f
-      i <- i + 1
+      # those samples with colonies of only one supposed fungal species
+      well_IDs[ strsplit(x, "[.]")[[1]][1], "Fungi" ] <- as.character(fungus.data[fungus.data[,1]==x, "Fungus"])
     }
   }
-}
-fungi.list <- vector(mode="list", length=length(diff_fungi))
-names(fungi.list) <- diff_fungi
-
-
-for (s in fungi.samples) {
-  if (grepl(',', sample_data(SLL)[s, "Fungi"] )) {
-    f1 <- strsplit( as.character( sample_data(SLL)[s, "Fungi"] ), ',' )[[1]][1]
-    f2 <- strsplit( as.character( sample_data(SLL)[s, "Fungi"] ), ',' )[[1]][2]
-    fungi.list[[ f1 ]] <- c(fungi.list[[ f1 ]], s)
-    fungi.list[[ f2 ]] <- c(fungi.list[[ f2 ]], s)
-  } else {
-    f <- as.character( sample_data(SLL)[s, "Fungi"] )
-    fungi.list[[ f ]] <- c(fungi.list[[ f ]], s)
+  
+  # To exclude those 'test' wells that are all labeled "C+", and get just those that are kept in sample_data(SLL)
+  proper_well_IDs <- well_IDs[substr(well_IDs[,"Sample_ID"], 1,3)=="SLL","Sample_ID"]
+  proper_well_IDs <- proper_well_IDs[proper_well_IDs %in% rownames(sample_data(SLL))]
+  
+  # Add column to sample_data of fungal species present in samples with data available
+  # ***Some have more than 1 species, separated by ","
+  #    If no data available for a sample, value is "0"
+  sample_data(SLL)[ proper_well_IDs, "Fungi" ] <- well_IDs[ well_IDs[,"Sample_ID"] %in% proper_well_IDs, "Fungi" ]
+  
+  # ************* #
+  # Determine which samples have which fungi present
+  fungi.samples <- rownames(sample_data(SLL)[ sample_data(SLL)[, "Fungi"] != 0])
+  
+  fungi_entries <- as.matrix(unique(sample_data(SLL)[fungi.samples, "Fungi"]))
+  diff_fungi <- vector()#mode = "character")
+  
+  # make a vector of all the different fungi that appear in the sample_data
+  i = 1
+  for (f in fungi_entries) {
+    if (grepl(',', f)) {
+      f1 <- strsplit(f, ',')[[1]][1]
+      f2 <- strsplit(f, ',')[[1]][2]
+      if (! f1 %in% diff_fungi) {
+        diff_fungi[i] <- f1
+        i <- i + 1
+      }
+      if (! f2 %in% diff_fungi) {
+        diff_fungi[i] <- f2
+        i <- i + 1
+      }
+    } else {
+      if (! f %in% diff_fungi) {
+        diff_fungi[i] <- f
+        i <- i + 1
+      }
+    }
+  }
+  fungi.list <- vector(mode="list", length=length(diff_fungi))
+  names(fungi.list) <- diff_fungi
+  
+  
+  for (s in fungi.samples) {
+    if (grepl(',', sample_data(SLL)[s, "Fungi"] )) {
+      f1 <- strsplit( as.character( sample_data(SLL)[s, "Fungi"] ), ',' )[[1]][1]
+      f2 <- strsplit( as.character( sample_data(SLL)[s, "Fungi"] ), ',' )[[1]][2]
+      fungi.list[[ f1 ]] <- c(fungi.list[[ f1 ]], s)
+      fungi.list[[ f2 ]] <- c(fungi.list[[ f2 ]], s)
+    } else {
+      f <- as.character( sample_data(SLL)[s, "Fungi"] )
+      fungi.list[[ f ]] <- c(fungi.list[[ f ]], s)
+    }
   }
 }
 
 # ************* #
+
 
 
 
@@ -357,17 +394,47 @@ for (s in fungi.samples) {
 # SLL1 = transform_sample_counts(SLL1, function(x) 100 * x/sum(x))
 SLL1 = transform_sample_counts(SLL, function(x) 100 * x/sum(x))
 
+saveRDS(SLL1@otu_table, sprintf("%s/SLL.rel.mothur.genus.rds", moth_dir))
 
-# write tax_table to file
-write.csv(tax_table(SLL1), sprintf("%s/Part_1/tax_table_SLL1.csv", home_dir))
+if (dir.exists("/users/tg/jwillis/SLL")) {
+  # write tax_table to file
+  write.csv(tax_table(SLL1), sprintf("%s/Part_1/tax_table_SLL1.csv", home_dir))
+  
+  # make file with list of sample names:
+  write(sort(sample_names(SLL1)), file = sprintf("%s/Part_1/sample_names.txt", home_dir))
+  s700 <- sort(sample_names(SLL1))[1:700]
+  s619 <- sort(sample_names(SLL1))[701:1319]
+  write(s700, file = sprintf("%s/Part_1/sample_names_s1-s700.txt", home_dir))
+  write(s619, file = sprintf("%s/Part_1/sample_names_s701-s1319.txt", home_dir))
+}
 
-# make file with list of sample names:
-write(sort(sample_names(SLL1)), file = sprintf("%s/Part_1/sample_names.txt", home_dir))
-s700 <- sort(sample_names(SLL1))[1:700]
-s619 <- sort(sample_names(SLL1))[701:1319]
-write(s700, file = sprintf("%s/Part_1/sample_names_s1-s700.txt", home_dir))
-write(s619, file = sprintf("%s/Part_1/sample_names_s701-s1319.txt", home_dir))
 
+
+
+
+
+# ******************************************************************** #
+## Calculate JSD distances ####
+
+# # if necessary to calculate these values again, simply uncomment this section.
+# # But takes a long time to calculate, better to read from files that were written from original calculation
+# library(foreach)
+# library(doParallel)
+# 
+# # This is required in order to register a parallel "backend" so the calculation can be run in parallel
+# registerDoParallel(cores = 10)
+# 
+# jsd <- distance(SLL, method = "jsd", parallel = T)
+# write.csv(as.matrix(jsd), file = sprintf("%s/beta_diversities/SLL1_jsd.mothur.csv", p1_dir))
+# 
+# # *********************** #
+jsd <- read.csv(sprintf("%s/beta_diversities/SLL1_jsd.mothur.csv", p1_dir), row.names = 1)
+diag(jsd) <- NA # change diagonal to NA because the values are already 0s since its each sample against itself, can be ignored
+# jsd <- as.dist(jsd)
+
+SLL@sam_data[ rownames(jsd), "JSD"] <- rowMeans(jsd, na.rm = T)
+SLL1@sam_data[ rownames(jsd), "JSD"] <- rowMeans(jsd, na.rm = T)
+# ******************************************************************** #
 
 
 
@@ -566,7 +633,7 @@ for (comm in names(comunidades)) {
 ###### Add various water values for each city ######
 # ********************************************************************************************************* #
 
-water_data <- read.delim(sprintf("%s/Water_quality_data/water_qualities_by_city.csv", home_dir))
+water_data <- read.delim(sprintf("%s/water_qualities_by_city.csv", water_dir))
 water_data <- water_data[1:30,]
 rownames(water_data) <- water_data[,1]
 rownames(water_data) <- gsub("Port d’Alcúdia", "Port d'Alcúdia", rownames(water_data))
@@ -728,7 +795,9 @@ for (tlev in c("Family","Order","Class","Phylum")) {
   print(tlev)
   taxa <- unique(tax_table(SLL1)[,tlev])
   # get counts of all genera from otu_table(SLL) that are within each value of the given tlev
-  tlev_otus[[tlev]] <- apply(otu_table(SLL), 2, function(x) sapply(taxa, function(y) sum(x[ rownames(tax_table(SLL)[ tax_table(SLL)[ , tlev ]==y, ]) ]) ) )
+  tlev_otus[[tlev]] <- apply(otu_table(SLL), 2, 
+                             function(x) sapply(taxa, 
+                                                function(y) sum(x[ rownames(tax_table(SLL)[ tax_table(SLL)[ , tlev ]==y, ]) ]) ) )
   rownames(tlev_otus[[tlev]]) <- taxa
   # get normalized values -- relative abundances
   tlev_otus_rel[[tlev]] <- apply(tlev_otus[[tlev]], 2, function(x) 100 * x/sum(x))
@@ -816,8 +885,11 @@ for (p in names(phy_list)) {
   phy_frame[1:length(phy_list[[p]]), p] <- phy_list[[p]]
 }
 
-write.csv(phy_frame, sprintf("%s/Part_1/figures/Abundances/pie_charts/Abundance_tables/%s_abundances.csv",
-                             home_dir,community), row.names = F)
+if (dir.exists("/users/tg/jwillis/SLL")) {
+  write.csv(phy_frame, sprintf("%s/Part_1/figures/Abundances/pie_charts/Abundance_tables/%s_abundances.csv",
+                               home_dir,community), row.names = F)
+}
+
 
 
 
@@ -894,8 +966,8 @@ donuts <- function(x, group = 1, labels_out = NA, labels_in = NA, col = NULL, ti
   # text(x = c(0.1, -.25, 0, .35, .5, 0.55), y = c(0.15, 0, -.3, -.25, -.1, -0.025), 
   #      labels = unique(phyla_for_pie$phylum), col = 'white', cex = 1.2)
 }
-# **************************** # 
-# **************************** # 
+# **************************** #
+# **************************** #
 
 community <- "all"
 # community <- "Islas Baleares"
@@ -989,11 +1061,14 @@ phyla_for_pie$total <- with(phyla_for_pie, ave(abunds, phylum, FUN = sum))
 with(phyla_for_pie,
      donuts(abunds, phylum, sprintf('%s: %s%%', genus, round(abunds,2)), unique(phylum),
             col = c('cyan2','red','orange','green','dodgerblue2','grey'),
+            # col = c('yellow','darkorange','green','purple','cyan','grey'),
             ti = pie_title)
 )
 # ****************************************************************************************************************** #
 
 
+# plist <- list(Actinobacteria="purple", Bacteroidetes="green", Firmicutes="yellow", Fusobacteria="cyan",
+#               Proteobacteria="darkorange", TM="black", Spirochaetes="grey", SR="indianred")
 
 
 
@@ -1407,10 +1482,13 @@ tax.to.clust <- otu_table(ttc)
 
 # Distance matrix object
 dist_meas <- "JSD"
+# dist_meas <- "JSD_alt"
 # dist_meas <- "Weighted_Unifrac"
 # dist_meas <- "Unweighted_Unifrac"
 
 if (dist_meas == "JSD") {
+  otu.jsd <- as.dist(jsd)
+} else if (dist_meas == "JSD_alt") {
   otu.jsd = dist.JSD(tax.to.clust)
 } else if (dist_meas == "Weighted_Unifrac") {
   otu.jsd = as.dist(weighted_Unifrac)
@@ -1716,6 +1794,49 @@ s.class(obs.pcoa$li, fac=as.factor(otu.cluster), grid=F, col=clust.col, clabel=1
 # obs.bet2=bca(obs.pcoa, fac=as.factor(otu.cluster), scannf=F, nf=k-1) 
 # s.class(obs.bet2$ls, fac=as.factor(otu.cluster), grid=F,sub="Between-class analysis", col=c(3,2,4,6,5))
 
+library(viridis)
+
+p1 <- ggplot(obs.pcoa$li, aes(x = A1, y = A2)) +
+  stat_density2d(aes(fill = ..density..), contour = F, geom = 'tile') +
+  scale_fill_viridis()
+
+p1 + geom_point(data=subset_ord_plot(p1, 0.5, "square"), size=1)
+
+# ***** #
+pcoa.org <- cbind(obs.pcoa$li, as.numeric(as.matrix(colSums(SLL1@otu_table[org,]))), as.factor(otu.cluster))
+colnames(pcoa.org) <- c(colnames(obs.pcoa$li), "org", "Stomatotype")
+shape_vals <- c(16, 12, 8)
+
+ggplot(pcoa.org, aes(x = A1, y = A2)) +
+  geom_point(aes(shape=Stomatotype), size=4) +
+  theme_minimal() +
+  scale_shape_manual(values=shape_vals)
+# ***** #
+
+ggplot(obs.pcoa$li, aes(x = A1, y = A2)) +
+  geom_point() +
+  theme_minimal() +
+  theme(plot.title = element_text(size=17)) +
+  ggtitle(sprintf("PCoA of samples based on JSD distance matrix"))
+
+
+# ggplot(obs.pca$li, aes(x = Axis1, y = Axis2)) +
+#   geom_point() +
+#   theme_minimal()
+# 
+# ggplot(obs.pca$l1, aes(x = RS1, y = RS2)) +
+#   geom_point() +
+#   theme_minimal()
+
+
+# p2 <- ggplot(obs.pcoa$li, aes(x = A1, y = A2)) +
+#   stat_density2d() +
+#   scale_fill_viridis()
+# 
+# p2 + geom_point(data=subset_ord_plot(p2, 0.7, "radial"), size=1)
+# 
+# library(plotly)
+# plot_ly(z = ~obs.pcoa$li[,1:2], type = "contour")
 
 
 # ************************* #
@@ -1775,6 +1896,7 @@ ggplot(SLL.top, aes(x=OTU, y=value, # This way keeps the order of top15 instead 
 
 # ********** #
 # to do paired boxes for top5
+library(ggpubr)
 top5 <- names(sort(taxa_sums(ttc), decreasing = T))[1:5]
 SLL.top5 <- cbind( melt(t(as.data.frame(tax.to.clust)[top5,])), melt(samples.by.cluster))
 
@@ -1792,7 +1914,7 @@ ggplot(SLL.top5, aes(x=Genus, y=value, fill=Stomatotype)) +
         axis.title.y=element_blank(), axis.title.x=element_text(size=14, face="bold")) +
   guides(fill = guide_legend(title.theme=element_text(size=13, angle=0, face="bold"), 
                              label.theme=element_text(size=16, angle=0)) ) + 
-  stat_compare_means(method = "t.test", label = "p.format", cex=5, color="red3", 
+  stat_compare_means(method = "wilcox.test", label = "p.format", cex=5, color="red3", 
                      label.y=c(61, 36, 42, 39, 37))
   # theme(axis.text = element_text(size = 14), plot.title = element_text(hjust=0.5)) +
   # ggtitle(sprintf('Percent of given Genus per sample by indicated Stomatotype'))
@@ -1826,6 +1948,115 @@ for (g in top.tax) {
     #   print(g)
   }
 }
+
+
+
+
+
+
+
+# ****************************************************************************************************************** #
+# get lists of taxa that are significantly greater in each Stomatotype of each type ####
+tl <- "Genus"; tagl <- SLL1
+
+dist_meas <- "JSD"
+# dist_meas <- "Weighted_Unifrac"
+# dist_meas <- "Unweighted_Unifrac"
+# dist_meas <- "Bray"
+# dist_meas <- "Canberra"
+
+get_sig_tax <- function(tagl, dist_meas) {
+  # list of tax ordered by overall abundance
+  top.tax <- names(sort(taxa_sums(tagl), decreasing = T))
+  
+  # list of samples in each of the given Stomatotype
+  # clu <- get_clusters( tagl, tl, dist_meas = dist_meas ) 
+  # stoms <- sapply(unique(as.character( clu[[ "cluster_full" ]] )), function(x) 
+  #   names(clu[[ "cluster_full" ]])[ clu[[ "cluster_full" ]] == x ])
+  stoms <- sapply(unique(as.character( otu.cluster )), function(x) 
+    names(otu.cluster)[ otu.cluster == x ])
+  # stoms <- sapply(unique(as.character(as.matrix(SLL.1@sam_data[,sprintf("Stomatotype_%s",dist_meas)]))), function(x) 
+  #   rownames(SLL.1@sam_data[SLL.1@sam_data[,sprintf("Stomatotype_%s",dist_meas)] == x,]))
+  
+  # for each stomatotype, get a vector of taxa that are significantly greater in that stomatotype than in others
+  sapply(names(stoms), function(st) {
+    other_st <- names(stoms)[ st != names(stoms) ]
+    
+    sig <- sapply(top.tax, function(tax) {
+      wilcox.test(as.numeric(as.matrix(otu_table(tagl)[ tax, stoms[[ st ]] ])), 
+                  as.numeric(as.matrix(otu_table(tagl)[ tax, unlist(stoms[ other_st ]) ])),
+                  alternative = "greater")$p.value
+    })
+    sig.adj <- p.adjust(sig, method = "fdr")
+    names(sig.adj[sig.adj<0.05])
+  })
+}
+
+sig_tax.dists <- get_sig_tax(tagl, "JSD")
+
+
+# ************************************************ #
+# Display gradients of abundances ####
+# ************************************************ #
+library(RColorBrewer)
+
+org <- "Veillonella"; org.title <- org; plot.title <- org
+# org <- sig_tax.dists[[ "1" ]]; org.title <- "Stom 1 sig"; plot.title <- "genera significantly greater in Stomatotype 1"
+# org <- sig_tax.dists[[ "2" ]]; org.title <- "Stom 2 sig"; plot.title <- "genera significantly greater in Stomatotype 2"
+# org <- sig_tax.dists[[ "3" ]]; org.title <- "Stom 3 sig"; plot.title <- "genera significantly greater in Stomatotype 3"
+# org <- rownames(SLL1@otu_table)[! rownames(SLL1@otu_table) %in% unname(unlist(sig_tax.dists))]; org.title <- "Insig"; plot.title <- "genera not significantly greater in any Stomatotype"
+
+org.abund <- as.numeric(as.matrix(colSums(SLL1@otu_table[org,])))
+pcoa.org <- cbind(obs.pcoa$li, as.numeric(as.matrix(colSums(SLL1@otu_table[org,]))), as.factor(otu.cluster))
+colnames(pcoa.org) <- c(colnames(obs.pcoa$li), "org", "Stomatotype")
+
+bins <- quantile(org.abund, probs=seq(0,1,0.1), na.rm = T)
+pcoa.org$bin <- as.factor(sapply(pcoa.org$org, function(x) round(max(bins[ x >= bins ]),2)))
+
+co <- colorRampPalette(rev(brewer.pal(11,"RdYlBu")))(11)
+# percentVar <- round(100*PCA$sdev^2/sum(PCA$sdev^2),1)
+if (length(unique(otu.cluster)) == 2) {
+  shape_vals <- c(16, 12)
+} else {
+  shape_vals <- c(16, 12, 8)
+}
+
+ggplot(pcoa.org, aes(x=A1, y=A2), col = bin) +
+  geom_point(aes(col=bin, shape=Stomatotype), size=4) +
+  theme_minimal() +
+  scale_color_manual(values=co) +
+  scale_shape_manual(values=shape_vals) +
+  labs(shape="Stomatotype", col=org.title) +
+  theme(plot.title = element_text(size=17), legend.text = element_text(size=13),
+        legend.title = element_text(size = 15, face = "bold")) +
+  ggtitle(sprintf("Gradient of abundances - %s", plot.title))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ****************************************************************************************************************** #
+
+
+
+
+
+
 
 
 
@@ -1898,8 +2129,10 @@ sna.net <- as.network(sna.gr, directed=FALSE)
 
 deg <- degree(sna.net, gmode="graph") # Indegree for MIDs
 phyla <- as.character(tax_table(SLL1)[ colnames(as.sociomatrix(sna.net)), "Phylum" ])
-plist <- list(Actinobacteria="purple", Bacteroidetes="green", Firmicutes="yellow", Fusobacteria="cyan",
-              Proteobacteria="darkorange", TM="black", Spirochaetes="grey", SR="indianred")
+# plist <- list(Actinobacteria="purple", Bacteroidetes="green", Firmicutes="yellow", Fusobacteria="cyan",
+#               Proteobacteria="darkorange", TM="black", Spirochaetes="grey", SR="indianred")
+plist <- list(Actinobacteria="green", Bacteroidetes="orange", Firmicutes="cyan2", Fusobacteria="dodgerblue2",
+              Proteobacteria="red3", TM="black", Spirochaetes="grey", SR="purple")
 phyla.col <- as.character(plist[phyla])#as.numeric(as.factor(phyla))
 
 # use as.edgelist(sna.net) to plot edge width and color based on correlation coefficient
@@ -1924,19 +2157,28 @@ if (clus_n==1 | clus_n==2) {
   if (clus_n == 1) { # this is so as to combine the 2 stomatotypes for the figure in the paper
     legend(x=max(coords[,"x"])-2,y=max(coords[,"y"])+1.25, unique(phyla), 
            fill=unique(phyla.col), bty="n", title="Phylum", cex=1.5)
+    legend(x=max(coords[,"x"])-2,y=min(coords[,"y"])+1, 
+           c(sprintf("|cor|=%s",round(max(abs(e.cor)),2)), sprintf("|cor|=%s",round(min(abs(e.cor)),2))), 
+           col=c("black","black"), bty="n", title="Edge width", cex=1.5, lwd=c(max(e.sizes),min(e.sizes)))
   } else if (clus_n == 2) {
     legend(x=min(coords[,"x"])-0.75,y=max(coords[,"y"])+1.5, c("Signif (+) cor", "Signif (-) cor"), 
            fill=c("red","blue"), bty="n", title="Edge color", cex=1.5)
+    legend(x=min(coords[,"x"])-0.75,y=min(coords[,"y"])+1, 
+           c(sprintf("|cor|=%s",round(max(abs(e.cor)),2)), sprintf("|cor|=%s",round(min(abs(e.cor)),2))), 
+           col=c("black","black"), bty="n", title="Edge width", cex=1.5, lwd=c(max(e.sizes),min(e.sizes)))
   }
   
 } else {
   # title(sprintf("Co-occurrence network of genera within all samples")) # dont use for paper figure
   # legend(x=min(coords[,"x"]),y=min(coords[,"y"])+2, unique(phyla), 
   #        fill=unique(phyla.col), bty="n", title="Phylum")
-  legend(x=max(coords[,"x"])-2.5,y=max(coords[,"y"])+1, unique(phyla), 
+  legend(x=max(coords[,"x"])-2,y=max(coords[,"y"])+1.25, unique(phyla), 
          fill=unique(phyla.col), bty="n", title="Phylum", cex=1.5)
-  legend(x=min(coords[,"x"]),y=max(coords[,"y"])+1, c("Signif (+) cor", "Signif (-) cor"), 
+  legend(x=min(coords[,"x"])-1.25,y=max(coords[,"y"])+1.25, c("Signif (+) cor", "Signif (-) cor"), 
          fill=c("red","blue"), bty="n", title="Edge color", cex=1.5)
+  legend(x=min(coords[,"x"])-1.25,y=min(coords[,"y"])+1, 
+         c(sprintf("|cor|=%s",round(max(abs(e.cor)),2)), sprintf("|cor|=%s",round(min(abs(e.cor)),2))), 
+         col=c("black","black"), bty="n", title="Edge width", cex=1.5, lwd=c(max(e.sizes),min(e.sizes)))
 }
 
 
@@ -2153,6 +2395,30 @@ if (region_type == "all") {
 # Will divide samples into quartiles based on their diversity values
 # We have a number of different diversity measures, so will take a look at each here:
 
+# first create columns in sample_data for each diversity value
+for (div.estimate in c("Div.Shannon","Div.Simpson","Weighted_Unifrac",
+                       "Unweighted_Unifrac","Faiths.PD","Species_Richness",
+                       "Bray.Curtis","Canberra")) {
+  divs <- as.numeric(sample_data(phy_obj_rel)[,div.estimate][[1]])
+  quarts <- quantile(divs, probs=seq(0,1,0.25))
+  
+  # get samples by diversity quartile
+  q1.samples <- rownames(sample_data(phy_obj)[ sample_data(phy_obj)[,div.estimate] < quarts['25%'], ] )
+  q2.samples <- rownames(sample_data(phy_obj)[ (quarts['25%'] <= sample_data(phy_obj)[,div.estimate]) & (sample_data(phy_obj)[,div.estimate] < quarts['50%']), ] )
+  q3.samples <- rownames(sample_data(phy_obj)[ (quarts['50%'] <= sample_data(phy_obj)[,div.estimate]) & (sample_data(phy_obj)[,div.estimate] < quarts['75%']), ] )
+  q4.samples <- rownames(sample_data(phy_obj)[ sample_data(phy_obj)[,div.estimate] >= quarts['75%'], ] )
+  
+  # add diversity group to sample_data 
+  sample_data(SLL)[q1.samples, sprintf("Diversity_group_%s", div.estimate)] <- "Low"
+  sample_data(SLL1)[q1.samples, sprintf("Diversity_group_%s", div.estimate)] <- "Low"
+  sample_data(SLL)[c(q2.samples,q3.samples), sprintf("Diversity_group_%s", div.estimate)] <- "Average"
+  sample_data(SLL1)[c(q2.samples,q3.samples), sprintf("Diversity_group_%s", div.estimate)] <- "Average"
+  sample_data(SLL)[q4.samples, sprintf("Diversity_group_%s", div.estimate)] <- "High"
+  sample_data(SLL1)[q4.samples, sprintf("Diversity_group_%s", div.estimate)] <- "High"
+}
+
+
+# then choose which one to look at on plots
 # div.estimate <- "Div.Observed"
 # div.estimate <- "Div.Chao1"
 # div.estimate <- "Div.ACE"
@@ -2164,23 +2430,8 @@ div.estimate <- "Div.Shannon"
 # div.estimate <- "Unweighted_Unifrac"
 # div.estimate <- "Faiths.PD"
 # div.estimate <- "Species_Richness"
-
-divs <- as.numeric(sample_data(phy_obj_rel)[,div.estimate][[1]])
-quarts <- quantile(divs, probs=seq(0,1,0.25))
-
-# get samples by diversity quartile
-q1.samples <- rownames(sample_data(phy_obj)[ sample_data(phy_obj)[,div.estimate] < quarts['25%'], ] )
-q2.samples <- rownames(sample_data(phy_obj)[ (quarts['25%'] <= sample_data(phy_obj)[,div.estimate]) & (sample_data(phy_obj)[,div.estimate] < quarts['50%']), ] )
-q3.samples <- rownames(sample_data(phy_obj)[ (quarts['50%'] <= sample_data(phy_obj)[,div.estimate]) & (sample_data(phy_obj)[,div.estimate] < quarts['75%']), ] )
-q4.samples <- rownames(sample_data(phy_obj)[ sample_data(phy_obj)[,div.estimate] >= quarts['75%'], ] )
-
-# add diversity group to sample_data 
-sample_data(SLL)[q1.samples, sprintf("Diversity_group_%s", div.estimate)] <- "Low"
-sample_data(SLL1)[q1.samples, sprintf("Diversity_group_%s", div.estimate)] <- "Low"
-sample_data(SLL)[c(q2.samples,q3.samples), sprintf("Diversity_group_%s", div.estimate)] <- "Average"
-sample_data(SLL1)[c(q2.samples,q3.samples), sprintf("Diversity_group_%s", div.estimate)] <- "Average"
-sample_data(SLL)[q4.samples, sprintf("Diversity_group_%s", div.estimate)] <- "High"
-sample_data(SLL1)[q4.samples, sprintf("Diversity_group_%s", div.estimate)] <- "High"
+# div.estimate <- "Bray.Curtis"
+# div.estimate <- "Canberra"
 
 # update our objects after adding the Diversity_group column
 if (region_type == "all") {
@@ -2377,8 +2628,8 @@ cont_bin <- c("Q2","Q3","Q4","Q12","Q12.1","Q12.2","Q12.3","Q12.4","Q12.5","Q12.
               "Q22.2","Q23.1","Q23.2","Q24.1","Q24.2","Q25.1","Q25.2","Q26.1","Q26.2","Q39.1","Q39.2","Q40.1","Q40.2","Q28.11","Q28.12","Q28.13",
               "Q28.14","Q28.15","Q28.16","Q28.17","Q28.18","Q28.19","Q28.20","Q28.21","Q28.22","Q28.23","Q28.24","Q28.25","Q28.26","Q28.27","Q28.28",
               "Q28.29","Q28.30","Q28.31","Q28.32","Q16.1","Div.Observed","Div.Chao1","Div.ACE","Div.Shannon","Div.Simpson","Div.InvSimpson",
-              "Div.Fisher","Faiths.PD","Species_Richness","Num_OTUs","Stomatotype","Stomatotype_CORE","Population","Age","Weighted_Unifrac",
-              "Unweighted_Unifrac",cont_water_data)#,"Water_hardness","Neisseria_Prevotella","Neisseria_Veillonella","Haemophilus_Prevotella","Haemophilus_Veillonella","Streptococcus_Prevotella","Prevotella_Bacteroides"
+              "Div.Fisher","Faiths.PD","Species_Richness","Num_OTUs","Stomatotype",#"Stomatotype_CORE",
+              "Population","Age","Weighted_Unifrac","Unweighted_Unifrac",cont_water_data)#,"Water_hardness","Neisseria_Prevotella","Neisseria_Veillonella","Haemophilus_Prevotella","Haemophilus_Veillonella","Streptococcus_Prevotella","Prevotella_Bacteroides"
 
 # cont_bin <- c(3,4,5,16:21,24:31,33,36:44,46,47,49,51,52,59:77,79:82,85,88:98,100,102,106:144,149:155,  156,  158)
 # #excel col:  (C,D,E, P:V,  X:AE,AG,AJ:AR,AT,AU,AW,AY,AZ,BG:BY,CA:CD,CG,CJ:CT,CV,  CX, DB:EN ,div-stats,#otus,Stomatotype)
@@ -2456,8 +2707,15 @@ for (i in os_qs.cont) {
     #   correl <- cor.test(data.cont[,j], data.cont[,i], na.rm=T, method="pearson")
     # }
     
-    correl <- cor.test(data.cont[,j], data.cont[,i], na.rm=T, method="pearson")
-    # correl <- cor.test(data.cont[,j], data.cont[,i], na.rm=T, method="spearman")
+    # if (i %in% otus.cont & j %in% otus.cont |
+    #     i %in% otus.cont & j %in% cont_water_data |
+    #     j %in% otus.cont & i %in% cont_water_data) {
+    if (i %in% otus.cont & j %in% otus.cont) {
+      correl <- cor.test(data.cont[,j], data.cont[,i], na.rm=T, method="spearman")
+    } else {
+      correl <- cor.test(data.cont[,j], data.cont[,i], na.rm=T, method="pearson")
+    }
+    
     res.matrix[i,j] <- correl$estimate
     ps.matrix[i,j] <- correl$p.value
   }
@@ -2637,7 +2895,8 @@ if (vs=='all') { #for all vs all
   cor.m.cont <- cbind( melt( res.Otu_Otu[ord,ord2] ), melt( plus.Otu_Otu[ord,ord2] ) )
   cor.m.cont <- cor.m.cont[,c(1,2,3,6)]
   colnames(cor.m.cont)[4] <- 'signif'
-  cor.m.lower <- subset( cor.m.cont[ upper.tri(res.Otu_Otu[ord,ord2]), ] )
+  # cor.m.lower <- subset( cor.m.cont[ upper.tri(res.Otu_Otu[ord,ord2]), ] )
+  cor.m.lower <- subset( cor.m.cont[ lower.tri(res.Otu_Otu[ord,ord2]), ] )
   
   ifelse(st == "Stomatotype_1", title_extra <<- sprintf(" - %s", st), 
          ifelse(st == "Stomatotype_2", title_extra <<- sprintf(" - %s", st),
@@ -2771,8 +3030,8 @@ if (vs=='all') { #for all vs all
     title <- sprintf('%s: gen_v_water cor() %s\n%s', st, tlev, reg_name)
   }
   
-  res.water.toprint <- res.Water_vals
-  res.water.toprint[ plus.Water_vals != '+' ] <- ''
+  res.water.toprint <- res.Water_vals[rev(ord),ord2]
+  res.water.toprint[ plus.Water_vals[rev(ord),ord2] != '+' ] <- ''
   write.csv(res.water.toprint, sprintf('%s/Part_1/figures/Correlations/%s/%s/PAPER_%s_%s_%s-minSamps_gen-v-water_signif_correlations.csv', 
                                        home_dir, tlev, st, tlev, st, min_samples))
   if (tlev=="Genus" & st=="no-bottled") {
@@ -2791,18 +3050,43 @@ if (st == "all" & vs == "otus") {
 }
 # ************* #
 
-ggplot(data = cor.m.cont, aes(x=Var2, y=Var1, fill=value)) + 
-  geom_tile(color="white", data=cor.m.lower) + 
-  geom_text(aes(label=signif), size = 4.5, data=cor.m.lower) + 
-  scale_fill_gradient2(low="blue", high="red", mid="white", midpoint=0, space="Lab",name="Pearson") +
-  theme_minimal() + 
-  # theme(axis.text = element_blank()) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 1, size = 8, hjust = 1),
-        axis.text.y = element_text(angle = 0, vjust = 1, size = 10, hjust = 1),
-        plot.title = element_text(hjust=0.5)) +
-#   scale_x_discrete(limits=rownames(cor.cont), labels=c(otus.cont)) +
-#   scale_y_discrete(limits=colnames(cor.cont), labels=c(questions.cont)) +
-  xlab('') + ylab('') #+ ggtitle(title)
+if (vs == "otus") {
+  ggplot(data = cor.m.cont, aes(x=Var2, y=Var1, fill=value)) + 
+    geom_tile(color="white", data=cor.m.lower) + 
+    geom_text(aes(label=signif), size = 4.5, data=cor.m.lower) + 
+    scale_fill_gradient2(low="blue", high="red", mid="white", midpoint=0, space="Lab",name="Pearson") +
+    # theme_minimal() +
+    theme(panel.background = element_rect(fill = "white", colour = "white"),
+          panel.grid.major = element_line(colour = "grey95")) +
+    scale_x_discrete(breaks=unique(cor.m.cont$Var2)[seq(5,length(unique(cor.m.cont$Var2)),5)], 
+                     labels = as.character(seq(5,length(unique(cor.m.cont$Var2)),5)), position = "top") +
+    scale_y_discrete(breaks=unique(cor.m.cont$Var1)[seq(length(unique(cor.m.cont$Var2))-4,0,-5)], # -4 to start since 
+                     labels = as.character(seq(5,length(unique(cor.m.cont$Var1)),5))) +
+    # theme(axis.text = element_blank()) +
+    # theme(axis.text.x = element_text(angle = 90, vjust = 1, size = 8, hjust = 1),
+    #       axis.text.y = element_text(angle = 0, vjust = 1, size = 10, hjust = 1),
+    #       plot.title = element_text(hjust=0.5)) +
+    #   scale_x_discrete(limits=rownames(cor.cont), labels=c(otus.cont)) +
+    #   scale_y_discrete(limits=colnames(cor.cont), labels=c(questions.cont)) +
+    xlab('') + ylab('') #+ ggtitle(title)
+  
+} else {
+  ggplot(data = cor.m.cont, aes(x=Var2, y=Var1, fill=value)) + 
+    geom_tile(color="white", data=cor.m.lower) + 
+    geom_text(aes(label=signif), size = 4.5, data=cor.m.lower) + 
+    scale_fill_gradient2(low="blue", high="red", mid="white", midpoint=0, space="Lab",name="Pearson") +
+    # theme_minimal() +
+    theme(panel.background = element_rect(fill = "white", colour = "white"),
+          panel.grid.major = element_line(colour = "grey95")) +
+    # theme(axis.text = element_blank()) +
+    theme(axis.text.x = element_text(angle = 90, vjust = 1, size = 8, hjust = 1),
+          axis.text.y = element_text(angle = 0, vjust = 1, size = 10, hjust = 1),
+          plot.title = element_text(hjust=0.5)) +
+    #   scale_x_discrete(limits=rownames(cor.cont), labels=c(otus.cont)) +
+    #   scale_y_discrete(limits=colnames(cor.cont), labels=c(questions.cont)) +
+    xlab('') + ylab('') #+ ggtitle(title)
+  
+}
 
 
 
@@ -3069,7 +3353,8 @@ cor.m.otus.1 <- cbind( melt( cosig ), melt( cor.plus ), melt( t.diff.stom1.stom2
 cor.m.otus.1 <- cor.m.otus.1[,c(1,2,3,6,9)]
 colnames(cor.m.otus.1)[4] <- 'signif'
 colnames(cor.m.otus.1)[5] <- 'borderCol'
-cor.m.otus.1.lower <- subset( cor.m.otus.1[ upper.tri(cosig), ] )
+# cor.m.otus.1.lower <- subset( cor.m.otus.1[ upper.tri(cosig), ] )
+cor.m.otus.1.lower <- subset( cor.m.otus.1[ lower.tri(cosig), ] )
 
 
 cosig <- as.matrix(cor.all.stom2)
@@ -3083,7 +3368,8 @@ cor.m.otus.2 <- cbind( melt( cosig ), melt( cor.plus ), melt( t.diff.stom1.stom2
 cor.m.otus.2 <- cor.m.otus.2[,c(1,2,3,6,9)]
 colnames(cor.m.otus.2)[4] <- 'signif'
 colnames(cor.m.otus.2)[5] <- 'borderCol'
-cor.m.otus.2.lower <- subset( cor.m.otus.2[ upper.tri(cosig), ] )
+# cor.m.otus.2.lower <- subset( cor.m.otus.2[ upper.tri(cosig), ] )
+cor.m.otus.2.lower <- subset( cor.m.otus.2[ lower.tri(cosig), ] )
 
 
 o1 <- ggplot(data = cor.m.otus.1, aes(x=Var2, y=Var1, fill=value)) + 
@@ -3094,13 +3380,19 @@ o1 <- ggplot(data = cor.m.otus.1, aes(x=Var2, y=Var1, fill=value)) +
   geom_text(aes(label=signif), size = 4.5, data=cor.m.otus.1.lower) + 
   scale_fill_gradient2(low="blue", high="red", mid="white", midpoint=0, space="Lab",name="Pearson") +
   # guides(fill=F)+
-  theme_minimal() + 
+  # theme_minimal() + 
+  theme(panel.background = element_rect(fill = "white", colour = "white"),
+        panel.grid.major = element_line(colour = "grey95")) +
   # theme(axis.text.x = element_blank(),
   #       axis.text.y = element_blank(),
   #       plot.title = element_text(hjust=0.5, size=17)) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 1, size = 8, hjust = 1),
-        axis.text.y = element_text(angle = 0, vjust = 1, size = 10, hjust = 1),
-        plot.title = element_text(hjust=0.5)) +
+  scale_x_discrete(breaks=unique(cor.m.otus.1$Var2)[seq(5,length(unique(cor.m.otus.1$Var2)),5)], 
+                   labels = as.character(seq(5,length(unique(cor.m.otus.1$Var2)),5)), position = "top") +
+  scale_y_discrete(breaks=unique(cor.m.otus.1$Var1)[seq(length(unique(cor.m.otus.1$Var2))-4,0,-5)], # -4 to start since 
+                   labels = as.character(seq(5,length(unique(cor.m.otus.1$Var1)),5))) +
+  # theme(axis.text.x = element_text(angle = 90, vjust = 1, size = 8, hjust = 1),
+  #       axis.text.y = element_text(angle = 0, vjust = 1, size = 10, hjust = 1),
+  #       plot.title = element_text(hjust=0.5)) +
   # guides(fill = guide_legend(title.theme=element_text(size=15, angle=0, face="bold"), 
   #                            label.theme=element_text(size=13, angle=0)) ) +
   # ggtitle(sprintf('OTUs cor() Genus - Stomatotype_1\nStomatotype_1 and Stomatotype_2 differ by at least %s highlighted', min.diff)) +
@@ -3115,10 +3407,16 @@ o2 <- ggplot(data = cor.m.otus.2, aes(x=Var2, y=Var1, fill=value)) +
   geom_text(aes(label=signif), size = 4.5, data=cor.m.otus.2.lower) + 
   scale_fill_gradient2(low="blue", high="red", mid="white", midpoint=0, space="Lab",name="Pearson") +
   # guides(fill=F)+
-  theme_minimal() + 
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank(),
-        plot.title = element_text(hjust=0.5, size=17)) +
+  # theme_minimal() + 
+  theme(panel.background = element_rect(fill = "white", colour = "white"),
+        panel.grid.major = element_line(colour = "grey95")) +
+  # theme(axis.text.x = element_blank(),
+  #       axis.text.y = element_blank(),
+  #       plot.title = element_text(hjust=0.5, size=17)) +
+  scale_x_discrete(breaks=unique(cor.m.otus.2$Var2)[seq(5,length(unique(cor.m.otus.2$Var2)),5)], 
+                   labels = as.character(seq(5,length(unique(cor.m.otus.2$Var2)),5)), position = "top") +
+  scale_y_discrete(breaks=unique(cor.m.otus.2$Var1)[seq(length(unique(cor.m.otus.2$Var2))-4,0,-5)], # -4 to start since 
+                   labels = as.character(seq(5,length(unique(cor.m.otus.2$Var1)),5))) +
   # ggtitle(sprintf('OTUs cor() Genus - Stomatotype_2\nStomatotype_1 and Stomatotype_2 differ by at least %s highlighted', min.diff)) +
   ggtitle("Stomatotype 2") +
   xlab('') + ylab('')
@@ -3583,8 +3881,10 @@ get_num_schools <- function(x) {
 num_schools_tlev <- sapply( rownames(P_A_table), get_num_schools )
 # order by length
 num_schools_tlev <- num_schools_tlev[ order(sapply(num_schools_tlev,length)) ]#,decreasing=T) ]
-dir.create(sprintf("%s/Part_1/figures/ttests/%s/Presence", home_dir, tlev), showWarnings = F)
-capture.output(num_schools_tlev, file = sprintf("%s/Part_1/figures/ttests/%s/Presence/%s_presence_num_schools.csv", home_dir, tlev, tlev) )
+if (dir.exists("/users/tg/jwillis/SLL")) {
+  dir.create(sprintf("%s/Part_1/figures/ttests/%s/Presence", home_dir, tlev), showWarnings = F)
+  capture.output(num_schools_tlev, file = sprintf("%s/Part_1/figures/ttests/%s/Presence/%s_presence_num_schools.csv", home_dir, tlev, tlev) )
+}
 
 # get the region names in which each genus appears
 get_region_tlev <- function(region) {
@@ -3614,9 +3914,11 @@ for (g in names(num_schools_tlev)) {
   tlev_by_community[ g, num_communities_tlev[[g]] ] <- "+"
 }
 
-write.csv(tlev_by_city, file = sprintf("%s/Part_1/figures/ttests/%s/Presence/%s_presence_by_city.csv", home_dir, tlev, tlev) )
-write.csv(tlev_by_province, file = sprintf("%s/Part_1/figures/ttests/%s/Presence/%s_presence_by_province.csv", home_dir, tlev, tlev) )
-write.csv(tlev_by_community, file = sprintf("%s/Part_1/figures/ttests/%s/Presence/%s_presence_by_community.csv", home_dir, tlev, tlev) )
+if (dir.exists("/users/tg/jwillis/SLL")) {
+  write.csv(tlev_by_city, file = sprintf("%s/Part_1/figures/ttests/%s/Presence/%s_presence_by_city.csv", home_dir, tlev, tlev) )
+  write.csv(tlev_by_province, file = sprintf("%s/Part_1/figures/ttests/%s/Presence/%s_presence_by_province.csv", home_dir, tlev, tlev) )
+  write.csv(tlev_by_community, file = sprintf("%s/Part_1/figures/ttests/%s/Presence/%s_presence_by_community.csv", home_dir, tlev, tlev) )
+}
 
 ## get the number of samples in which each OTU is present, and the mean abundance in those samples in which it is present
 num_samples_present <- sapply(rownames(P_A_table), function(x) sum(P_A_table[x, ]))
@@ -3675,7 +3977,8 @@ group_qs <- c("Q2","Q8","Q15","Q15.1","Q18","Q19","Q19.1","Q19.3","Q19.5","Q19.6
               "Q30","Q31","Q32","Q33","Q34","Q35","Q36","Q37","Q38","Q41","Q43","Q44","Q45","Q46","Q47","Q48",
               "Q49","Q50","Q51","Q52","Q53","Q54","Q1.1","Q14.1","Q14.2","Q22.1","Q23.1","Q24.1","Q25.1","Q26.1",
               "Q39.1","Q40.1","Q28.11","Q28.13","Q28.15","Q28.17","Q28.19","Q28.21","Q28.23","Q28.25","Q28.27","Q28.29",
-              "Q28.31","Stomatotype","Stomatotype_CORE","Diversity_group_Div.Shannon","Diversity_group_Div.Simpson",
+              "Q28.31","Stomatotype",#"Stomatotype_CORE",
+              "Diversity_group_Div.Shannon","Diversity_group_Div.Simpson",
               "Diversity_group_Weighted_Unifrac","Diversity_group_Unweighted_Unifrac","Diversity_group_Faiths.PD",
               "Diversity_group_Species_Richness","BMI_group","BMI_official",group_water_data)#,"Water_hardness_group"
 if (st %in% c("students", "teachers")) group_qs <- group_qs[group_qs != "Q1.1"]
@@ -3833,8 +4136,9 @@ good.kw.signif <- kw.signif[ keep_rows, keep_cols]
 print(Sys.time() - t0)
 
 # write.csv(kw.signif, sprintf('%s/Part_1/figures/Kruskal-Wallis/%s/%s/%s_%s_%s-minSamps_signif_kw_stat.csv', home_dir, tlev, st, tlev, st, min_samples))
-write.csv(good.kw.signif, sprintf('%s/Part_1/figures/Kruskal-Wallis/%s/%s/PAPER_%s_%s_anova_%s-minSamps_signif_kw_stat.csv', home_dir, tlev, st, tlev, st, min_samples))
-if (tlev=="Genus") {
+write.csv(good.kw.signif, sprintf('%s/Part_1/figures/Kruskal-Wallis/%s/%s/PAPER_%s_%s_anova_%s-minSamps_signif_kw_stat.csv', 
+                                  home_dir, tlev, st, tlev, st, min_samples))
+if (tlev=="Genus" & st=="all") {
   write.csv(good.kw.signif, sprintf('%s/Part_1/SLL1_paper/supp_material/Supp_table_3.csv', home_dir))
 }
 # ***************************************************************** #
@@ -3854,15 +4158,15 @@ t.test( as.numeric(as.matrix(sample_data(SLL1)[rownames(sample_data(SLL1)[sample
 
 # ******************** #
 # boxplots of particular group_q vs cont data/otu abundance ####
-group_col <- "Q1.1"
-cont_col <- "Alloscardovia"
+group_col <- "Stomatotype"
+cont_col <- "Granulicatella"
 kw.box <- as.data.frame( cbind(as.matrix(data.mix[, cont_col]), group_qs[, group_col]) )
 colnames(kw.box) <- c("cont","group")
 # kw.box <- kw.box[ kw.box[ , "group"] != "No Sabe/No Contesta", ]
 
 ggplot(kw.box, aes(x=reorder(group,-as.numeric(as.character(cont)),median), y=as.numeric(as.character(cont)), 
                    fill=reorder(group,-as.numeric(as.character(cont)),median))) +
-  geom_boxplot() + theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1)) +
+  geom_boxplot(notch = T) + theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1)) +
   xlab(group_col) + ylab(cont_col) + scale_fill_hue(name=group_col) #+ ylim(10,50)
 # ******************** #
 
@@ -3947,12 +4251,12 @@ table(as.numeric(as.matrix(sample_data(SLL1))[sample_data(SLL1)[,"Q1.1"]=="Stude
 # *** None of these is actually interesting because in all of these cases, there were only 2 with the indicated category of animal, 
 #     and in each case, only 1 of the 2 samples had a non-0 abundance of the indicated genus
 
-People with girl/boyfriend -- higher Num_OTUs
-Cold alcoholic drinks -- higher Num_OTUs
-No sweets -- more Anaerovorax
-Stomatotype 1 -- higher Div.Simpson
-
-Teachers -- higher unweighted unifrac
+# People with girl/boyfriend -- higher Num_OTUs
+# Cold alcoholic drinks -- higher Num_OTUs
+# No sweets -- more Anaerovorax
+# Stomatotype 1 -- higher Div.Simpson
+# 
+# Teachers -- higher unweighted unifrac
 # ****************************************************************************************************************** #
 
 # check how many samples contain genera of a given hgher level OTU: ####
@@ -3975,8 +4279,29 @@ library(graphics)
 library(vcd)
 library(corrplot)
 
-tlev <- "Genus"; otutab <- otu_table(SLL)
-# tlev <- "Phylum"; otutab <- tlev_otus[[tlev]]
+st <- "all"
+# st <- "students"
+# st <- "teachers"
+# st <- "no-bottled"
+# st <- "only-bottled"
+
+t0 <- Sys.time()
+
+st_samps <- sample_names(SLL1)
+if (st == "students") {
+  st_samps <- st_samps[ sample_data(SLL1)[,"Q1.1"]=="Student" ]
+} else if (st == "teachers") {
+  st_samps <- st_samps[ sample_data(SLL1)[,"Q1.1"]=="Teacher" ]
+} else if (st == "no-bottled") {
+  st_samps <- st_samps[ sample_data(SLL1)[,"Q27"]!="Embotellada" ]
+} else if (st == "only-bottled") {
+  st_samps <- st_samps[ sample_data(SLL1)[,"Q27"]=="Embotellada" ]
+}
+
+
+
+tlev <- "Genus"; otutab <- otu_table(SLL)[,st_samps]
+# tlev <- "Phylum"; otutab <- tlev_otus[[tlev]][,st_samps]
 
 P_A_table <- apply( otutab, 2, function(x) ifelse(x==0, 0, 1) )
 # take only those columns for OTUs which are not present in 100% of samples
@@ -3988,10 +4313,12 @@ group_Qs <- c("Q2","Q8","Q15","Q15.1","Q18","Q19","Q19.1","Q19.3","Q19.5","Q19.6
               "Q30","Q31","Q32","Q33","Q34","Q35","Q36","Q37","Q38","Q41","Q43","Q45","Q46","Q48",
               "Q49","Q50","Q51","Q52","Q53","Q54","Q1.1","Q14.1","Q14.2","Q22.1","Q23.1","Q24.1","Q25.1","Q26.1",
               "Q39.1","Q40.1","Q28.11","Q28.13","Q28.15","Q28.17","Q28.19","Q28.21","Q28.23","Q28.25","Q28.27","Q28.29",
-              "Q28.31","Stomatotype","Stomatotype_CORE","Diversity_group_Div.Shannon","Diversity_group_Div.Simpson",
+              "Q28.31","Stomatotype",#"Stomatotype_CORE",
+              "Diversity_group_Div.Shannon","Diversity_group_Div.Simpson",
               "Diversity_group_Weighted_Unifrac","Diversity_group_Unweighted_Unifrac","Diversity_group_Faiths.PD",
               "Diversity_group_Species_Richness","BMI_group","BMI_official",group_water_data)#,"Water_hardness_group"
-group_Qs <- as.matrix(sample_data(SLL1)[, group_Qs])
+if (st %in% c("students","teachers")) group_Qs <- group_Qs[group_Qs != "Q1.1"]
+group_Qs <- as.matrix(sample_data(SLL1)[st_samps, group_Qs])
 group_Qs <- cbind( group_Qs, t(P_A_table))
 
 chi.matrix <- matrix(NA, nrow = ncol(group_Qs), ncol = ncol(group_Qs))
@@ -4039,7 +4366,8 @@ colnames(pluses) <- colnames(chi.matrix.adj)
 rownames(pluses) <- rownames(chi.matrix.adj)
 pluses[chi.matrix.adj < 0.05] <- '+'
 
-write.csv(only.good.chi.matrix.adj, sprintf("%s/Part_1/figures/Chi-squared/%s/signif_chi-squared.csv", home_dir, tlev))
+write.csv(only.good.chi.matrix.adj, sprintf("%s/Part_1/figures/Chi-squared/%s/%s/%s_%s_signif_chi-squared.csv", 
+                                            home_dir, tlev, st, tlev, st))
 if (tlev=="Genus") {
   write.csv(only.good.chi.matrix.adj, sprintf('%s/Part_1/SLL1_paper/supp_material/Supp_table_4.csv', home_dir))
 }
@@ -4047,8 +4375,8 @@ if (tlev=="Genus") {
 
 
 
-rows <- "Q53"
-cols <- "Q20.1"
+rows <- "Stomatotype"
+cols <- "Q40.1"
 # contingency <- table(as.character(as.matrix(sample_data(SLL)[ , rows ])), 
 #                      as.character(as.matrix(sample_data(SLL)[ , cols ])),
 #                      dnn = c(rows,cols))
@@ -4891,10 +5219,10 @@ library(plotrix)
 # library(classInt)
 
 # esp.shp <- readShapeSpatial("/users/tg/jwillis/SLL/ESP_adm_shp/ESP_adm0.shp")
-esp.shp.com <- readShapeSpatial( sprintf("%s/ESP_adm_shp/ESP_adm1.shp", home_dir) )
-esp.shp.prov <- readShapeSpatial( sprintf("%s/ESP_adm_shp/ESP_adm2.shp", home_dir) )
+esp.shp.com <- readShapeSpatial( sprintf("%s/ESP_adm1.shp", esp_dir) )
+esp.shp.prov <- readShapeSpatial( sprintf("%s/ESP_adm2.shp", esp_dir) )
 # esp.shp <- readShapeSpatial("/users/tg/jwillis/SLL/ESP_adm_shp/ESP_adm3.shp")
-esp.shp.city <- readShapeSpatial( sprintf("%s/ESP_adm_shp/ESP_adm4.shp", home_dir) )
+esp.shp.city <- readShapeSpatial( sprintf("%s/ESP_adm4.shp", esp_dir) )
 # plot(esp.shp)
 
 
@@ -5153,6 +5481,55 @@ plot_map(g, fills)
 # ****************************************************************************************************************** #
 
 
+
+
+
+
+
+
+
+
+
+
+
+# ****************************************************************************************************************** #
+###### Abundances across schools of each Genus ######
+# ****************************************************************************************************************** #
+
+# filter those OTUs appearing in fewer than a given number of samples
+min_samples <- 20
+good.otus <- sapply(taxa_names(SLL1), function(x) sum(SLL1@otu_table[x, ]!=0) >= min_samples)
+good.otus <- taxa_names(SLL1)[ good.otus ]
+
+loc <- "School"; col <- "Qsamples.1"
+# loc <- "Community"; col <- "Community"
+
+for (gen in good.otus) {
+  abund.by.school <- as.data.frame( cbind(as.numeric(as.matrix(SLL1@otu_table)[gen,]), 
+                                          SLL1@sam_data[,col]) )
+  colnames(abund.by.school) <- c("Genus","Location")
+  
+  p <- ggplot(abund.by.school, aes(x=reorder(Location,-Genus,FUN=mean), y=Genus, 
+                                   fill=reorder(Location,-Genus,FUN=mean))) +
+    geom_boxplot() + theme_minimal() + ggtitle(gen) +
+    # theme(axis.text.x=element_blank(), plot.title = element_text(hjust=0.5)) +
+    theme(axis.text=element_text(size=16, angle=90), axis.title=element_text(size=16, face="bold"),
+          plot.title = element_text(hjust=0.5, size=16, face="bold")) +
+    # ggtitle(sprintf('%s per sample for %s', measure, "School_ID")) +
+    xlab(loc) + ylab("Abundance") + guides(fill=FALSE)# +
+  # stat_summary(fun.data = counts, geom='text', size=6)
+  
+  ggsave(filename = sprintf("%s/SLL1_paper/extras/abund_by_school/%s/%s.png", p1_dir,loc,gen), plot = p, device = "png")
+}
+
+
+
+Alloscardovia - 39
+Arthrobacter - 14,37
+Cupriavidus - 41
+Eikenella - 17,20,19,18,21
+Labrenzia - 24,26
+Mesorhizobium - 14,13,41,34, Aragon
 
 
 
@@ -5638,6 +6015,170 @@ for ( phenotype in colnames(new_phenos_table) ) {
 
 # save allTables into a file
 saveRDS( allTables, sprintf('%s/Part_1/METAGENassist/allTables.rds', home_dir) )
+
+
+
+
+
+save.image(file = "/users/tg/jwillis/SLL/Part_1/phyloseq_data.RData")
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ****************** #
+# tables for hackathon:
+sd.hack <- as.matrix(SLL@sam_data)
+sd.hack <- sd.hack[ , ! colnames(sd.hack) %in% c("X","Q1","Q5","Q5.1","Q6","Q6.1","Q7","Q7.1",
+                                                 "Q9","Q10","Q11","Q12","Q12.1","Q12.2","Q12.3",
+                                                 "Q12.4","Q12.5","Q12.6","Q12.7","Q12.8","Q13",
+                                                 "Q13.1","Q13.2","Q13.3","Q13.4","Q13.5","Q13.6",
+                                                 "Q13.7","Q13.8","Q14","Q47","Q0.same.as.the.first.column",
+                                                 "Qsamples","Q16.1","Q5.2","Q6.2","Q7.2","Q15.1",colnames(water_data)) ]
+
+write.csv(sd.hack, "/users/tg/jwillis/SLL/Hackathons_Game/sample_data.csv")
+write.csv(SLL1@otu_table, "/users/tg/jwillis/SLL/Hackathons_Game/otu_table.csv")
+
+
+
+
+
+
+
+
+
+
+# ****************** #
+# get the best few genera to use in board game:
+top.cors <- sort(sapply(colnames(res.Que_Otu.signif), function(x) sum(res.Que_Otu.signif[,x] != '')), decreasing = T)[1:10]
+top.cors <- names(top.cors)[! names(top.cors) %in% top10]
+
+# check how much these genera actually appear
+sort(percent_samples_present[top.cors])
+sort(mean_abund[top.cors])
+
+# so it looks like Campylobacter, Ralstonia, Rhizobium, Pseudomonas, and Variovorax will be the most interesting of these
+# the genera of interest (goi) will include these 5 and the 5 most abundant genera:
+goi <- c("Streptococcus","Prevotella","Haemophilus","Neisseria","Veillonella",
+         "Campylobacter","Ralstonia","Rhizobium","Pseudomonas","Variovorax")
+
+
+only_cont <- c("Q3","Q16","Q17","Q19.2","Q19.4","Q19.7","Q19.10","Q28","Q28.1","Q28.2","Q28.3","Q28.4",
+               "Q28.5","Q28.6","Q28.7","Q28.8","Q28.9","Q28.10","Q29","Q29.1","Q29.2","Q29.3","Q00.PH",
+               "Socioeconomic","Q3.1","Q22.2","Q23.2","Q24.2","Q25.2","Q26.2","Q39.2","Q40.2","Q28.12",
+               "Q28.14","Q28.16","Q28.18","Q28.20","Q28.22","Q28.24","Q28.26","Q28.28","Q28.30","Q28.32",
+               "Q16.1","Div.Observed","Div.Chao1","Div.ACE","Div.Shannon","Div.Simpson","Div.InvSimpson",
+               "Div.Fisher","Faiths.PD","Species_Richness","Num_OTUs",#"Stomatotype","Stomatotype_CORE",
+               "Population","Age","Weighted_Unifrac","Unweighted_Unifrac",cont_water_data)#,"Water_hardness","Neisseria_Prevotella","Neisseria_Veillonella",
+#"Haemophilus_Prevotella","Haemophilus_Veillonella","Streptococcus_Prevotella","Prevotella_Bacteroides",
+
+cont_bin <- c("Q2","Q3","Q4","Q16","Q17","Q18","Q19","Q19.1","Q19.2","Q19.3","Q19.4","Q19.5","Q19.7",
+              "Q19.8","Q19.10","Q20.1","Q21","Q28","Q28.1","Q28.2","Q28.3","Q28.4","Q28.5","Q28.6",
+              "Q28.7","Q28.8","Q28.9","Q28.10","Q29","Q29.1","Q29.2","Q29.3","Q30","Q31","Q32","Q33",
+              "Q35","Q36","Q37","Q38","Q41","Q47","Q44","Q45","Q46","Q48","Q49","Q50","Q51","Q52",
+              "Q53","Q54","Q00.PH","Socioeconomic","Q3.1","Q22.1","Q22.2","Q23.1","Q23.2","Q24.1",
+              "Q24.2","Q25.1","Q25.2","Q26.1","Q26.2","Q39.1","Q39.2","Q40.1","Q40.2","Q28.11",
+              "Q28.12","Q28.13","Q28.14","Q28.15","Q28.16","Q28.17","Q28.18","Q28.19","Q28.20","Q28.21",
+              "Q28.22","Q28.23","Q28.24","Q28.25","Q28.26","Q28.27","Q28.28","Q28.29","Q28.30","Q28.31",
+              "Q28.32","Q16.1","Div.Observed","Div.Chao1","Div.ACE","Div.Shannon","Div.Simpson","Div.InvSimpson",
+              "Div.Fisher","Faiths.PD","Species_Richness","Num_OTUs","Stomatotype","Population",
+              "Age","Weighted_Unifrac","Unweighted_Unifrac",cont_water_data)#,"Water_hardness","Neisseria_Prevotella","Neisseria_Veillonella","Haemophilus_Prevotella","Haemophilus_Veillonella","Streptococcus_Prevotella","Prevotella_Bacteroides"
+
+
+
+tlev <- "Genus"; otutab_rel <- otu_table(SLL1)
+# tlev <- "Order"; otutab_rel <- tlev_otus_rel[[tlev]]
+# tlev <- "Phylum"; otutab_rel <- tlev_otus_rel[[tlev]]
+
+# data.small <- cbind(t(otutab_rel[ goi, ]), sample_data(SLL1)[ , only_cont])
+data.small <- cbind(t(otutab_rel[ goi, ]), sample_data(SLL1)[ , cont_bin])
+
+data.small[data.small=='No Sabe/No Contesta'] <- NA
+data.small <- apply(data.small, 2, as.numeric)
+
+otus.small <- rownames(otutab_rel[ goi, ])
+# questions.small <- only_cont
+questions.small <- cont_bin
+
+os_qs.small <- c(otus.small,questions.small)
+
+#instead try cor.test:
+res.small <- matrix(NA, nrow=length(os_qs.small), ncol=length(os_qs.small))
+colnames(res.small) <- os_qs.small
+rownames(res.small) <- os_qs.small
+ps.small <- matrix(NA, nrow=length(os_qs.small), ncol=length(os_qs.small))
+colnames(ps.small) <- os_qs.small
+rownames(ps.small) <- os_qs.small
+
+
+for (i in os_qs.small) {
+  for (j in os_qs.small) {
+
+    correl <- cor.test(data.small[,j], data.small[,i], na.rm=T, method="pearson")
+    # correl <- cor.test(data.small[,j], data.small[,i], na.rm=T, method="spearman")
+    res.small[i,j] <- correl$estimate
+    ps.small[i,j] <- correl$p.value
+  }
+}
+
+ps.small.adj <- apply(ps.small, 2, p.adjust, method='bonferroni', n=length(os_qs.small))
+#*****Is this too strict since there are more comparisons if we include otus vs otus and ques vs ques?***
+diag(ps.small.adj) <- 1
+#For some questions that have all 0s (occurs when doing cities alone)
+res.small[is.na(res.small)] <- 0
+ps.small.adj[is.na(ps.small.adj)] <- 1
+
+pluses.small <- matrix('', nrow=length(rownames(res.small)), ncol=length(colnames(res.small)))
+colnames(pluses.small) <- colnames(res.small)
+rownames(pluses.small) <- rownames(res.small)
+pluses.small[ps.small.adj < 0.05] <- '+'
+
+
+
+#at least 1 good min p within samples
+mins <- apply(ps.small.adj[ questions.small, otus.small ], 2, min)
+goodmin <- mins[mins < 0.05] #-log10(0.05) == 1.3013 
+#at least 1 good min p within taxa
+tmins <- apply(ps.small.adj[ questions.small, otus.small ], 1, min)
+tgoodmin <- tmins[tmins < 0.05]
+res.small.good <- res.small[names(tgoodmin),names(goodmin)]
+plus.small.good <- pluses.small[names(tgoodmin),names(goodmin)]
+
+
+# only print correlation values for which p-value is significant
+res.small.signif <- matrix(NA, nrow=nrow(res.small.good), ncol=ncol(res.small.good))
+colnames(res.small.signif) <- colnames(res.small.good)
+rownames(res.small.signif) <- rownames(res.small.good)
+
+for (i in rownames(res.small.good)) {
+  for (j in colnames(res.small.good)) {
+    if (plus.small.good[i,j] == '+') {
+      res.small.signif[i,j] <- res.small.good[i,j]
+    } else {
+      res.small.signif[i,j] <- ''
+    }
+  }
+}
+
+
+# add row for mean abundance of each genus, and for percentage of samples in which it appears
+res.small.signif <- as.data.frame(t(res.small.signif))
+res.small.signif[ , "Mean_abundance" ] <- round(rowMeans(otutab_rel[rownames(res.small.signif),]), 3)
+res.small.signif[ , "%_samples_with" ] <- round(percent_samples_present[rownames(res.small.signif)], 3)
+res.small.signif[ , "Mean_abund_Stom_1" ] <- round(rowMeans(otutab_rel[rownames(res.small.signif), SLL@sam_data$Stomatotype==1]), 3)
+res.small.signif[ , "Mean_abund_Stom_2" ] <- round(rowMeans(otutab_rel[rownames(res.small.signif), SLL@sam_data$Stomatotype==2]), 3)
+res.small.signif <- t(res.small.signif)
+
+write.csv(res.small.signif, "/users/tg/jwillis/SLL/Hackathons_Game/Correlations_for_game.csv")
+
 
 
 
